@@ -1,0 +1,20 @@
+{
+  "name": "srf-sheet-bot",
+  "version": "1.0.0",
+  "description": "Telegram bot for managing FB jobs with Excel export",
+  "main": "bot.js",
+  "scripts": {
+    "start": "node bot.js",
+    "dev": "nodemon bot.js"
+  },
+  "dependencies": {
+    "@upstash/redis": "^1.38.0",
+    "dotenv": "^16.4.7",
+    "exceljs": "^4.4.0",
+    "express": "^5.2.1",
+    "node-telegram-bot-api": "^0.66.0"
+  },
+  "devDependencies": {
+    "nodemon": "^3.1.9"
+  }
+}
