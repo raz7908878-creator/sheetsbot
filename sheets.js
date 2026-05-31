@@ -231,15 +231,24 @@ async function generateLiveExcel(userId, type, onProgress) {
   if (!jobsList || jobsList.length === 0) return null;
 
   const liveJobs = [];
+  const CONCURRENCY_LIMIT = 5;
   
-  for (let i = 0; i < jobsList.length; i++) {
-    const job = jobsList[i];
-    const isLive = await checkLiveUid(job.uid);
-    if (isLive) {
-      liveJobs.push(job);
+  for (let i = 0; i < jobsList.length; i += CONCURRENCY_LIMIT) {
+    const chunk = jobsList.slice(i, i + CONCURRENCY_LIMIT);
+    const results = await Promise.all(chunk.map(async (job) => {
+      const isLive = await checkLiveUid(job.uid);
+      return { job, isLive };
+    }));
+    
+    for (const res of results) {
+      if (res.isLive) {
+        liveJobs.push(res.job);
+      }
     }
+    
     if (onProgress) {
-      await onProgress(i + 1, jobsList.length);
+      const current = Math.min(i + CONCURRENCY_LIMIT, jobsList.length);
+      await onProgress(current, jobsList.length);
     }
   }
 
@@ -301,15 +310,24 @@ async function filterUploadedExcel(buffer, onProgress) {
   totalCount = rowsToProcess.length;
   if (totalCount === 0) return { filePath: null, liveCount: 0, totalCount: 0 };
   
-  for (let i = 0; i < totalCount; i++) {
-    const item = rowsToProcess[i];
-    const isLive = await checkLiveUid(item.uid);
-    if (isLive) {
-      liveCount++;
-      newWorksheet.addRow(item.row.values);
+  const CONCURRENCY_LIMIT = 5;
+  for (let i = 0; i < totalCount; i += CONCURRENCY_LIMIT) {
+    const chunk = rowsToProcess.slice(i, i + CONCURRENCY_LIMIT);
+    const results = await Promise.all(chunk.map(async (item) => {
+      const isLive = await checkLiveUid(item.uid);
+      return { row: item.row, isLive };
+    }));
+    
+    for (const res of results) {
+      if (res.isLive) {
+        liveCount++;
+        newWorksheet.addRow(res.row.values);
+      }
     }
+    
     if (onProgress) {
-      await onProgress(i + 1, totalCount);
+      const current = Math.min(i + CONCURRENCY_LIMIT, totalCount);
+      await onProgress(current, totalCount);
     }
   }
   
