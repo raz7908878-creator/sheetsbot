@@ -231,10 +231,19 @@ async function generateLiveExcel(userId, type) {
   if (!jobsList || jobsList.length === 0) return null;
 
   const liveJobs = [];
-  for (const job of jobsList) {
-    const isLive = await checkLiveUid(job.uid);
-    if (isLive) {
-      liveJobs.push(job);
+  const CONCURRENCY_LIMIT = 50;
+  
+  for (let i = 0; i < jobsList.length; i += CONCURRENCY_LIMIT) {
+    const chunk = jobsList.slice(i, i + CONCURRENCY_LIMIT);
+    const results = await Promise.all(chunk.map(async (job) => {
+      const isLive = await checkLiveUid(job.uid);
+      return { job, isLive };
+    }));
+    
+    for (const res of results) {
+      if (res.isLive) {
+        liveJobs.push(res.job);
+      }
     }
   }
 
@@ -274,6 +283,7 @@ async function filterUploadedExcel(buffer) {
   
   let totalCount = 0;
   let liveCount = 0;
+  const rowsToProcess = [];
   
   for (let i = 1; i <= worksheet.rowCount; i++) {
     const row = worksheet.getRow(i);
@@ -284,12 +294,7 @@ async function filterUploadedExcel(buffer) {
     const cellValue = firstCell.toString().trim();
     
     if (/^\d+$/.test(cellValue)) {
-      totalCount++;
-      const isLive = await checkLiveUid(cellValue);
-      if (isLive) {
-        liveCount++;
-        newWorksheet.addRow(row.values);
-      }
+      rowsToProcess.push({ row, uid: cellValue });
     } else {
       if (i === 1) {
         newWorksheet.addRow(row.values);
@@ -297,7 +302,24 @@ async function filterUploadedExcel(buffer) {
     }
   }
   
+  totalCount = rowsToProcess.length;
   if (totalCount === 0) return { filePath: null, liveCount: 0, totalCount: 0 };
+  
+  const CONCURRENCY_LIMIT = 50;
+  for (let i = 0; i < rowsToProcess.length; i += CONCURRENCY_LIMIT) {
+    const chunk = rowsToProcess.slice(i, i + CONCURRENCY_LIMIT);
+    const results = await Promise.all(chunk.map(async (item) => {
+      const isLive = await checkLiveUid(item.uid);
+      return { row: item.row, isLive };
+    }));
+    
+    for (const res of results) {
+      if (res.isLive) {
+        liveCount++;
+        newWorksheet.addRow(res.row.values);
+      }
+    }
+  }
   
   if (liveCount === 0) return { filePath: null, liveCount: 0, totalCount };
   
