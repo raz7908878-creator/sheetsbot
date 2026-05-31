@@ -450,8 +450,12 @@ bot.on('callback_query', async (query) => {
   }
 
   // ---- FILTER UPLOADED FILE ----
-  else if (data.startsWith('filter_file_')) {
-    const fileId = data.replace('filter_file_', '');
+  else if (data === 'filter_file_upload') {
+    const state = getState(userId);
+    if (!state || !state.fileId) {
+      return bot.sendMessage(chatId, '⚠️ File session expired. Please upload the .xlsx file again.');
+    }
+    const fileId = state.fileId;
     
     await bot.editMessageText(`⏳ Downloading file and checking accounts... This might take a moment.`, {
       chat_id: chatId,
@@ -640,10 +644,11 @@ bot.on('message', async (msg) => {
   if (msg.document) {
     const doc = msg.document;
     if (doc.file_name && doc.file_name.endsWith('.xlsx')) {
+      setState(userId, { step: 'uploaded_file', fileId: doc.file_id });
       await bot.sendMessage(chatId, `📁 Received *${doc.file_name}*\n\nDo you want to filter live accounts from this file?`, {
         parse_mode: 'Markdown',
         reply_markup: {
-          inline_keyboard: [[{ text: '🔍 Filter Live Accounts', callback_data: `filter_file_${doc.file_id}` }]]
+          inline_keyboard: [[{ text: '🔍 Filter Live Accounts', callback_data: `filter_file_upload` }]]
         }
       });
     }
