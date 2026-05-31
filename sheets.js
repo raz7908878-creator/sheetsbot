@@ -231,7 +231,7 @@ async function generateLiveExcel(userId, type) {
   if (!jobsList || jobsList.length === 0) return null;
 
   const liveJobs = [];
-  const CONCURRENCY_LIMIT = 250;
+  const CONCURRENCY_LIMIT = 50;
   
   for (let i = 0; i < jobsList.length; i += CONCURRENCY_LIMIT) {
     const chunk = jobsList.slice(i, i + CONCURRENCY_LIMIT);
@@ -305,7 +305,7 @@ async function filterUploadedExcel(buffer) {
   totalCount = rowsToProcess.length;
   if (totalCount === 0) return { filePath: null, liveCount: 0, totalCount: 0 };
   
-  const CONCURRENCY_LIMIT = 250;
+  const CONCURRENCY_LIMIT = 50;
   for (let i = 0; i < rowsToProcess.length; i += CONCURRENCY_LIMIT) {
     const chunk = rowsToProcess.slice(i, i + CONCURRENCY_LIMIT);
     const results = await Promise.all(chunk.map(async (item) => {
