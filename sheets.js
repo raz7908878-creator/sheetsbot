@@ -261,6 +261,52 @@ async function generateLiveExcel(userId, type) {
   return { filePath, liveCount: liveJobs.length, totalCount: jobsList.length };
 }
 
+async function filterUploadedExcel(buffer) {
+  const workbook = new ExcelJS.Workbook();
+  await workbook.xlsx.load(buffer);
+  
+  const worksheet = workbook.worksheets[0];
+  if (!worksheet) return null;
+  
+  const newWorkbook = new ExcelJS.Workbook();
+  newWorkbook.creator = 'SRF Sheet Bot';
+  const newWorksheet = newWorkbook.addWorksheet('Live Accounts');
+  
+  let totalCount = 0;
+  let liveCount = 0;
+  
+  for (let i = 1; i <= worksheet.rowCount; i++) {
+    const row = worksheet.getRow(i);
+    const firstCell = row.getCell(1).value;
+    
+    if (!firstCell) continue;
+    
+    const cellValue = firstCell.toString().trim();
+    
+    if (/^\d+$/.test(cellValue)) {
+      totalCount++;
+      const isLive = await checkLiveUid(cellValue);
+      if (isLive) {
+        liveCount++;
+        newWorksheet.addRow(row.values);
+      }
+    } else {
+      if (i === 1) {
+        newWorksheet.addRow(row.values);
+      }
+    }
+  }
+  
+  if (totalCount === 0) return { filePath: null, liveCount: 0, totalCount: 0 };
+  
+  if (liveCount === 0) return { filePath: null, liveCount: 0, totalCount };
+  
+  const filePath = path.join(DATA_DIR, `SRF_Filtered_Jobs_${Date.now()}.xlsx`);
+  await newWorkbook.xlsx.writeFile(filePath);
+  
+  return { filePath, liveCount, totalCount };
+}
+
 module.exports = {
   getSetting,
   setSetting,
@@ -270,6 +316,7 @@ module.exports = {
   clearJobs,
   generateExcel,
   generateLiveExcel,
+  filterUploadedExcel,
   loadJobs,
   getLastJob,
   updateLastJob

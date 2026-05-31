@@ -449,6 +449,45 @@ bot.on('callback_query', async (query) => {
     }
   }
 
+  // ---- FILTER UPLOADED FILE ----
+  else if (data.startsWith('filter_file_')) {
+    const fileId = data.replace('filter_file_', '');
+    
+    await bot.editMessageText(`⏳ Downloading file and checking accounts... This might take a moment.`, {
+      chat_id: chatId,
+      message_id: query.message.message_id
+    }).catch(() => {});
+
+    try {
+      const fileLink = await bot.getFileLink(fileId);
+      const fetchRes = await fetch(fileLink);
+      const buffer = await fetchRes.arrayBuffer();
+      
+      const result = await store.filterUploadedExcel(Buffer.from(buffer));
+      if (!result || result.totalCount === 0) {
+        await bot.sendMessage(chatId, '⚠️ No valid UIDs found in the first column or invalid file.');
+        return;
+      }
+      
+      if (!result.filePath) {
+        await bot.sendMessage(chatId, `❌ Out of ${result.totalCount} rows checked, 0 are live.`);
+        return;
+      }
+
+      const captionText = `📥 *Live Accounts Filtered*\n\n✅ Checked: ${result.totalCount}\n🟢 Live: ${result.liveCount}\n🔴 Dead: ${result.totalCount - result.liveCount}`;
+
+      await bot.sendDocument(chatId, result.filePath, {
+        caption: captionText,
+        parse_mode: 'Markdown'
+      });
+
+      fs.unlinkSync(result.filePath);
+    } catch (err) {
+      console.error('Filter file error:', err);
+      await bot.sendMessage(chatId, '❌ Failed to filter the uploaded file.');
+    }
+  }
+
   // ---- CLEAR DATA ----
   else if (data === 'clear_data') {
     const counts = await store.getJobCounts(userId);
@@ -597,6 +636,20 @@ bot.on('message', async (msg) => {
 
   const chatId = msg.chat.id;
   const userId = msg.from.id;
+
+  if (msg.document) {
+    const doc = msg.document;
+    if (doc.file_name && doc.file_name.endsWith('.xlsx')) {
+      await bot.sendMessage(chatId, `📁 Received *${doc.file_name}*\n\nDo you want to filter live accounts from this file?`, {
+        parse_mode: 'Markdown',
+        reply_markup: {
+          inline_keyboard: [[{ text: '🔍 Filter Live Accounts', callback_data: `filter_file_${doc.file_id}` }]]
+        }
+      });
+    }
+    return;
+  }
+
   const text = msg.text ? msg.text.trim() : '';
   const state = getState(userId);
 
