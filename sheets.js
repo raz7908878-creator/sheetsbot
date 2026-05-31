@@ -193,6 +193,74 @@ async function generateExcel(userId, type) {
   return filePath;
 }
 
+// ============ FILTER LIVE ============
+
+async function checkLiveUid(uid) {
+  try {
+    const res = await fetch(`https://graph.facebook.com/${uid}/picture?type=normal`, {
+      method: 'GET',
+      redirect: 'manual'
+    });
+    
+    if (res.status >= 300 && res.status < 400) {
+      const location = res.headers.get('location');
+      if (location && (location.includes('static.xx.fbcdn.net') || location.includes('C5yt7Cqf3zU.jpg'))) {
+        return false; // dead
+      }
+      if (location) {
+        return true; // live
+      }
+    } else if (res.status === 404 || res.status === 400) {
+      return false; // dead or invalid
+    }
+    
+    return true; // fallback
+  } catch (err) {
+    console.error('Check UID error:', err);
+    return false;
+  }
+}
+
+async function generateLiveExcel(userId, type) {
+  const userJobs = await getUserJobs(userId);
+  let jobsList = [];
+
+  if (type === '2fa') jobsList = userJobs.twoFa;
+  else if (type === 'cookies') jobsList = userJobs.cookies;
+
+  if (!jobsList || jobsList.length === 0) return null;
+
+  const liveJobs = [];
+  for (const job of jobsList) {
+    const isLive = await checkLiveUid(job.uid);
+    if (isLive) {
+      liveJobs.push(job);
+    }
+  }
+
+  if (liveJobs.length === 0) return { filePath: null, liveCount: 0, totalCount: jobsList.length };
+
+  const workbook = new ExcelJS.Workbook();
+  workbook.creator = 'SRF Sheet Bot';
+  workbook.created = new Date();
+
+  const sheetName = type === '2fa' ? 'Live 2FA Jobs' : 'Live Cookies Jobs';
+  const sheet = workbook.addWorksheet(sheetName);
+  sheet.getColumn(1).width = 25;
+  sheet.getColumn(2).width = 25;
+  sheet.getColumn(3).width = type === '2fa' ? 40 : 70;
+
+  liveJobs.forEach(job => {
+    sheet.addRow([job.uid, job.password, type === '2fa' ? job.two_fa_key : job.cookies]);
+  });
+
+  const prefix = type === '2fa' ? '2FA_' : type === 'cookies' ? 'Cookies_' : '';
+  const filePath = path.join(DATA_DIR, `SRF_Live_${prefix}Jobs_${Date.now()}.xlsx`);
+  await workbook.xlsx.writeFile(filePath);
+
+  return { filePath, liveCount: liveJobs.length, totalCount: jobsList.length };
+}
+
 module.exports = {
   getSetting,
   setSetting,
@@ -201,6 +269,7 @@ module.exports = {
   getAllUserStats,
   clearJobs,
   generateExcel,
+  generateLiveExcel,
   loadJobs,
   getLastJob,
   updateLastJob

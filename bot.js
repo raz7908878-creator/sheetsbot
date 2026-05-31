@@ -312,7 +312,10 @@ bot.on('callback_query', async (query) => {
 
       await bot.sendDocument(chatId, filePath, {
         caption: `📥 *Admin Export*\nUser ID: \`${targetUserId}\` ( ${safeUsername} )\nType: ${type.toUpperCase()}\nCount: ${jobCount} jobs`,
-        parse_mode: 'Markdown'
+        parse_mode: 'Markdown',
+        reply_markup: {
+          inline_keyboard: [[{ text: '🔍 Filter Live', callback_data: `filter_live_${type}_${targetUserId}` }]]
+        }
       });
 
       fs.unlinkSync(filePath);
@@ -394,7 +397,10 @@ bot.on('callback_query', async (query) => {
 
       await bot.sendDocument(chatId, filePath, {
         caption: captionText,
-        parse_mode: 'Markdown'
+        parse_mode: 'Markdown',
+        reply_markup: {
+          inline_keyboard: [[{ text: '🔍 Filter Live', callback_data: `filter_live_${type}_${userId}` }]]
+        }
       });
 
       // Auto-delete temp file only, keep job data
@@ -402,6 +408,44 @@ bot.on('callback_query', async (query) => {
     } catch (err) {
       console.error('Export error:', err.message);
       await bot.sendMessage(chatId, '❌ Failed to generate file. Try again.');
+    }
+  }
+
+  // ---- FILTER LIVE ----
+  else if (data.startsWith('filter_live_')) {
+    const parts = data.split('_');
+    const type = parts[2]; // '2fa' or 'cookies'
+    const targetUserId = parts[3];
+
+    if (userId.toString() !== targetUserId && (!process.env.ADMIN_ID || userId.toString() !== process.env.ADMIN_ID)) {
+      return bot.sendMessage(chatId, '⛔ You cannot filter these jobs.');
+    }
+
+    await bot.sendMessage(chatId, `⏳ Checking accounts for ${type.toUpperCase()} jobs... This might take a moment.`);
+
+    try {
+      const result = await store.generateLiveExcel(targetUserId, type);
+      if (!result || result.totalCount === 0) {
+        await bot.sendMessage(chatId, '⚠️ No jobs found to filter.');
+        return;
+      }
+
+      if (!result.filePath) {
+        await bot.sendMessage(chatId, `❌ Out of ${result.totalCount} jobs checked, 0 are live.`);
+        return;
+      }
+
+      const captionText = `📥 *Live Accounts Filtered*\n\n✅ Checked: ${result.totalCount}\n🟢 Live: ${result.liveCount}\n🔴 Dead: ${result.totalCount - result.liveCount}`;
+
+      await bot.sendDocument(chatId, result.filePath, {
+        caption: captionText,
+        parse_mode: 'Markdown'
+      });
+
+      fs.unlinkSync(result.filePath);
+    } catch (err) {
+      console.error('Filter live error:', err.message);
+      await bot.sendMessage(chatId, '❌ Failed to filter live accounts.');
     }
   }
 
