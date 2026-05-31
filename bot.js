@@ -421,10 +421,23 @@ bot.on('callback_query', async (query) => {
       return bot.sendMessage(chatId, '⛔ You cannot filter these jobs.');
     }
 
-    await bot.sendMessage(chatId, `⏳ Checking accounts for ${type.toUpperCase()} jobs... This might take a moment.`);
+    const waitMsg = await bot.sendMessage(chatId, `⏳ Checking accounts for ${type.toUpperCase()} jobs... This might take a moment.`);
 
     try {
-      const result = await store.generateLiveExcel(targetUserId, type);
+      const onProgress = async (current, total) => {
+        if (current % 10 === 0 || current === total) {
+          const percent = Math.round((current / total) * 100);
+          await bot.editMessageText(`⏳ Checking accounts for ${type.toUpperCase()} jobs... ${percent}% (${current}/${total})`, {
+            chat_id: chatId,
+            message_id: waitMsg.message_id
+          }).catch(() => {});
+        }
+      };
+
+      const result = await store.generateLiveExcel(targetUserId, type, onProgress);
+      
+      await bot.deleteMessage(chatId, waitMsg.message_id).catch(() => {});
+
       if (!result || result.totalCount === 0) {
         await bot.sendMessage(chatId, '⚠️ No jobs found to filter.');
         return;
@@ -457,7 +470,7 @@ bot.on('callback_query', async (query) => {
     }
     const fileId = state.fileId;
     
-    await bot.editMessageText(`⏳ Downloading file and checking accounts... This might take a moment.`, {
+    await bot.editMessageText(`⏳ Downloading file and checking accounts... 0%`, {
       chat_id: chatId,
       message_id: query.message.message_id
     }).catch(() => {});
@@ -467,7 +480,20 @@ bot.on('callback_query', async (query) => {
       const fetchRes = await fetch(fileLink);
       const buffer = await fetchRes.arrayBuffer();
       
-      const result = await store.filterUploadedExcel(Buffer.from(buffer));
+      const onProgress = async (current, total) => {
+        if (current % 10 === 0 || current === total) {
+          const percent = Math.round((current / total) * 100);
+          await bot.editMessageText(`⏳ Checking accounts... ${percent}% (${current}/${total})`, {
+            chat_id: chatId,
+            message_id: query.message.message_id
+          }).catch(() => {});
+        }
+      };
+
+      const result = await store.filterUploadedExcel(Buffer.from(buffer), onProgress);
+      
+      await bot.deleteMessage(chatId, query.message.message_id).catch(() => {});
+
       if (!result || result.totalCount === 0) {
         await bot.sendMessage(chatId, '⚠️ No valid UIDs found in the first column or invalid file.');
         return;

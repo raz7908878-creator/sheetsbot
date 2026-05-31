@@ -221,7 +221,7 @@ async function checkLiveUid(uid) {
   }
 }
 
-async function generateLiveExcel(userId, type) {
+async function generateLiveExcel(userId, type, onProgress) {
   const userJobs = await getUserJobs(userId);
   let jobsList = [];
 
@@ -231,19 +231,15 @@ async function generateLiveExcel(userId, type) {
   if (!jobsList || jobsList.length === 0) return null;
 
   const liveJobs = [];
-  const CONCURRENCY_LIMIT = 50;
   
-  for (let i = 0; i < jobsList.length; i += CONCURRENCY_LIMIT) {
-    const chunk = jobsList.slice(i, i + CONCURRENCY_LIMIT);
-    const results = await Promise.all(chunk.map(async (job) => {
-      const isLive = await checkLiveUid(job.uid);
-      return { job, isLive };
-    }));
-    
-    for (const res of results) {
-      if (res.isLive) {
-        liveJobs.push(res.job);
-      }
+  for (let i = 0; i < jobsList.length; i++) {
+    const job = jobsList[i];
+    const isLive = await checkLiveUid(job.uid);
+    if (isLive) {
+      liveJobs.push(job);
+    }
+    if (onProgress) {
+      await onProgress(i + 1, jobsList.length);
     }
   }
 
@@ -270,7 +266,7 @@ async function generateLiveExcel(userId, type) {
   return { filePath, liveCount: liveJobs.length, totalCount: jobsList.length };
 }
 
-async function filterUploadedExcel(buffer) {
+async function filterUploadedExcel(buffer, onProgress) {
   const workbook = new ExcelJS.Workbook();
   await workbook.xlsx.load(buffer);
   
@@ -305,19 +301,15 @@ async function filterUploadedExcel(buffer) {
   totalCount = rowsToProcess.length;
   if (totalCount === 0) return { filePath: null, liveCount: 0, totalCount: 0 };
   
-  const CONCURRENCY_LIMIT = 50;
-  for (let i = 0; i < rowsToProcess.length; i += CONCURRENCY_LIMIT) {
-    const chunk = rowsToProcess.slice(i, i + CONCURRENCY_LIMIT);
-    const results = await Promise.all(chunk.map(async (item) => {
-      const isLive = await checkLiveUid(item.uid);
-      return { row: item.row, isLive };
-    }));
-    
-    for (const res of results) {
-      if (res.isLive) {
-        liveCount++;
-        newWorksheet.addRow(res.row.values);
-      }
+  for (let i = 0; i < totalCount; i++) {
+    const item = rowsToProcess[i];
+    const isLive = await checkLiveUid(item.uid);
+    if (isLive) {
+      liveCount++;
+      newWorksheet.addRow(item.row.values);
+    }
+    if (onProgress) {
+      await onProgress(i + 1, totalCount);
     }
   }
   
