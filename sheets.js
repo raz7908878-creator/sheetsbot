@@ -230,11 +230,22 @@ async function generateLiveExcel(userId, type, onProgress) {
 
   if (!jobsList || jobsList.length === 0) return null;
 
+  const seenUids = new Set();
+  const uniqueJobs = [];
+  for (const job of jobsList) {
+    if (!seenUids.has(job.uid)) {
+      seenUids.add(job.uid);
+      uniqueJobs.push(job);
+    }
+  }
+
+  if (uniqueJobs.length === 0) return { filePath: null, liveCount: 0, totalCount: 0 };
+
   const liveJobs = [];
   const CONCURRENCY_LIMIT = 5;
   
-  for (let i = 0; i < jobsList.length; i += CONCURRENCY_LIMIT) {
-    const chunk = jobsList.slice(i, i + CONCURRENCY_LIMIT);
+  for (let i = 0; i < uniqueJobs.length; i += CONCURRENCY_LIMIT) {
+    const chunk = uniqueJobs.slice(i, i + CONCURRENCY_LIMIT);
     const results = await Promise.all(chunk.map(async (job) => {
       const isLive = await checkLiveUid(job.uid);
       return { job, isLive };
@@ -247,12 +258,12 @@ async function generateLiveExcel(userId, type, onProgress) {
     }
     
     if (onProgress) {
-      const current = Math.min(i + CONCURRENCY_LIMIT, jobsList.length);
-      await onProgress(current, jobsList.length);
+      const current = Math.min(i + CONCURRENCY_LIMIT, uniqueJobs.length);
+      await onProgress(current, uniqueJobs.length);
     }
   }
 
-  if (liveJobs.length === 0) return { filePath: null, liveCount: 0, totalCount: jobsList.length };
+  if (liveJobs.length === 0) return { filePath: null, liveCount: 0, totalCount: uniqueJobs.length };
 
   const workbook = new ExcelJS.Workbook();
   workbook.creator = 'SRF Sheet Bot';
@@ -289,6 +300,7 @@ async function filterUploadedExcel(buffer, onProgress) {
   let totalCount = 0;
   let liveCount = 0;
   const rowsToProcess = [];
+  const seenUids = new Set();
   
   for (let i = 1; i <= worksheet.rowCount; i++) {
     const row = worksheet.getRow(i);
@@ -299,7 +311,10 @@ async function filterUploadedExcel(buffer, onProgress) {
     const cellValue = firstCell.toString().trim();
     
     if (/^\d+$/.test(cellValue)) {
-      rowsToProcess.push({ row, uid: cellValue });
+      if (!seenUids.has(cellValue)) {
+        seenUids.add(cellValue);
+        rowsToProcess.push({ row, uid: cellValue });
+      }
     } else {
       if (i === 1) {
         newWorksheet.addRow(row.values);
