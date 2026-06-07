@@ -448,7 +448,12 @@ bot.on('callback_query', async (query) => {
         return;
       }
 
-      const captionText = `📥 *Live Accounts Filtered*\n\n✅ Checked: ${result.totalCount}\n🟢 Live: ${result.liveCount}\n🔴 Dead: ${result.totalCount - result.liveCount}`;
+      const allStats = await store.getAllUserStats();
+      const targetUserStat = allStats.find(u => String(u.userId) === String(targetUserId));
+      const targetUsername = targetUserStat ? targetUserStat.username : 'Unknown';
+      const safeUsername = targetUsername.replace(/_/g, '\\_').replace(/\*/g, '\\*').replace(/\[/g, '\\[').replace(/`/g, '\\`');
+
+      const captionText = `📥 *Live Checked*\nUser ID: \`${targetUserId}\` ( ${safeUsername} )\nType: ${type.toUpperCase()}\nCount live: ${result.liveCount} jobs\nCount Dead: ${result.totalCount - result.liveCount} jobs`;
 
       await bot.sendDocument(chatId, result.filePath, {
         caption: captionText,
